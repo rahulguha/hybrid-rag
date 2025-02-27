@@ -8,7 +8,10 @@ from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationChain
-# from langchain_core.runnables import RunnableWithMessageHistory
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain.schema import BaseMessage
+# from langchain.memory import ConversationBuffer
+
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -43,14 +46,26 @@ def get_model():
     return ChatOpenAI(model_name="gpt-4", api_key=os.getenv("OPENAI_API_KEY"))
 def get_memory_handle():
     return ConversationBufferMemory(memory_key="history", return_messages=True)
+    # return ConversationBuffer(memory_key="history", return_messages=True)
+    
 
-
+class SessionHistory:
+    def __init__(self, messages):
+        self.messages = messages  # Ensure the object has a `.messages` attribute
+    def add_messages(self, new_messages):
+        """LangChain expects an `add_messages` method, so we append to the list."""
+        self.messages.extend(new_messages)
 
 def get_conversation_chain():
-    return ConversationChain (
-        llm=get_model(),
-        memory=get_memory_handle(),
-        verbose=True  # Set to True to view logs for debugging
+    session_id = "XXX"
+    return RunnableWithMessageHistory(
+        runnable=get_model(),
+        # get_message_history=get_memory_handle(),
+        # get_session_history=lambda session_id: get_memory_handle().load_memory_variables(session_id)["history"],
+        get_session_history=lambda session_id: SessionHistory(
+            get_memory_handle().load_memory_variables(session_id).get("history", [])
+        ),
+        verbose=False 
     )
 def build_prompt_with_context(query_text, search_results):
     if len(search_results) == 0 or search_results[0][1] < 0.3:
@@ -64,10 +79,11 @@ def build_prompt_with_context(query_text, search_results):
     return prompt
 
 def chat(db, conversation_chain):
+    session_id = "XXX"
     while True:
         # Ask the user for a question
         query_text = input("You: ")
-        print (query_text)
+        
         # Exit the loop if the user types 'quit'
         if query_text.lower() == "quit":
             print("Goodbye!")
@@ -78,12 +94,24 @@ def chat(db, conversation_chain):
         print(len(results))
         # setup prompt with context
         prompt = build_prompt_with_context(query_text, results)
-        print (prompt)
+        
         # get sources
         sources = get_sources(results)
 
         # Get the model's response based on the conversation chain
-        response = conversation_chain.predict(input=prompt)
-        formatted_response = f"Response: {response}\nSources: {sources}"
+        # response = conversation_chain.predict(input=prompt)
+        response = conversation_chain.invoke(
+            input=prompt,
+            config={"configurable": {"session_id": session_id}}
+            )
+        # Extract only the response text
+        # print (response)
+        if isinstance(response, BaseMessage):
+            # Extract message content from BaseMessage object
+            response_text = response.content
+        else:
+            # If it's not a BaseMessage, fallback to string conversion
+            response_text = str(response)
+        formatted_response = f"Response: {response_text}\nSources: {sources}"
         # Print the response
         print("Bot:", formatted_response)
