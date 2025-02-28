@@ -1,6 +1,6 @@
 # from dataclasses import dataclass
 from langchain_chroma import Chroma 
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, util
 from langchain_openai import OpenAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 
@@ -12,17 +12,19 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain.schema import BaseMessage
 # from langchain.memory import ConversationBuffer
 
-
+from rapidfuzz import process
 from dotenv import load_dotenv
 load_dotenv()
 import os
 from util import *
 from cls_podcast_episode import *
+from summarizer import *
 import json
 CHROMA_PATH = get_vector_db_location()
 
 
 embedding_model = get_rag_embedding()
+
 
 def load_sentence_transformer():
     # You can choose any pre-trained model from Sentence-Transformers
@@ -49,6 +51,15 @@ def get_memory_handle():
     # return ConversationBuffer(memory_key="history", return_messages=True)
     
 
+# decision making
+def process_user_input(user_input):
+    # Simple intent check based on keywords
+    if any(keyword in user_input.lower() for keyword in ['summary', 'summarize', 'overview']):
+        return 'summary'
+    else:
+        return 'question'
+
+
 class SessionHistory:
     def __init__(self, messages):
         self.messages = messages  # Ensure the object has a `.messages` attribute
@@ -60,8 +71,6 @@ def get_conversation_chain():
     session_id = "XXX"
     return RunnableWithMessageHistory(
         runnable=get_model(),
-        # get_message_history=get_memory_handle(),
-        # get_session_history=lambda session_id: get_memory_handle().load_memory_variables(session_id)["history"],
         get_session_history=lambda session_id: SessionHistory(
             get_memory_handle().load_memory_variables(session_id).get("history", [])
         ),
@@ -84,34 +93,39 @@ def chat(db, conversation_chain):
         # Ask the user for a question
         query_text = input("You: ")
         
+
         # Exit the loop if the user types 'quit'
         if query_text.lower() == "quit":
             print("Goodbye!")
             break
 
+        intent = process_user_input(query_text)
+
         # Search the DB.
         results = vector_search(query_text, db, 6)
-        print(len(results))
         # setup prompt with context
         prompt = build_prompt_with_context(query_text, results)
         
         # get sources
         sources = get_sources(results)
-
-        # Get the model's response based on the conversation chain
-        # response = conversation_chain.predict(input=prompt)
-        response = conversation_chain.invoke(
-            input=prompt,
-            config={"configurable": {"session_id": session_id}}
-            )
-        # Extract only the response text
-        # print (response)
-        if isinstance(response, BaseMessage):
-            # Extract message content from BaseMessage object
-            response_text = response.content
-        else:
-            # If it's not a BaseMessage, fallback to string conversion
-            response_text = str(response)
+        if intent == 'summary': # Summary - use local ollama
+            content = get_source_episode_context(results)
+            # Summarize the episodes based on the retrieved context
+            response_text = create_summary(content)
+        else: # normal Q&A - use openai
+            # Get the model's response based on the conversation chain
+            response = conversation_chain.invoke(
+                input=prompt,
+                config={"configurable": {"session_id": session_id}}
+                )
+            # Extract only the response text
+            if isinstance(response, BaseMessage):
+                # Extract message content from BaseMessage object
+                response_text = response.content
+            else:
+                # If it's not a BaseMessage, fallback to string conversion
+                response_text = str(response)
+        # add sources
         formatted_response = f"Response: {response_text}\nSources: {sources}"
         # Print the response
         print("Bot:", formatted_response)

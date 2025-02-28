@@ -194,7 +194,7 @@ def stop_program_if_condition(condition):
   """
   if condition:
     sys.exit(0)  # Exit the program with a success code (0)
-  
+
 # S3 related 
 def download_s3_bucket_flat( local_dir, prefix="", aws_region="us-east-1"):
     """
