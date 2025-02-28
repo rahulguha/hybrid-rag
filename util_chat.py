@@ -7,12 +7,11 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.memory import ConversationBufferMemory
-from langchain.chains import ConversationChain
+# from langchain.chains import ConversationChain
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain.schema import BaseMessage
 # from langchain.memory import ConversationBuffer
 
-from rapidfuzz import process
 from dotenv import load_dotenv
 load_dotenv()
 import os

@@ -44,11 +44,11 @@ def get_source_episode_context(search_results):
     for s in search_results:
         episode_name = s[0].metadata['episode_name']
         if episode_name not in episode_names_set:
-            episode = PodcastEpisode(
-                episode_name=s[0].metadata['episode_name'],
-                episode_link=s[0].metadata['episode_link'],
-                podcast_name=s[0].metadata['podcast_name'],
-            )
+            # episode = PodcastEpisode(
+            #     episode_name=s[0].metadata['episode_name'],
+            #     episode_link=s[0].metadata['episode_link'],
+            #     podcast_name=s[0].metadata['podcast_name'],
+            # )
             context = context + get_transcript_for_episode(episode_name)
 
     
